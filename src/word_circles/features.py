@@ -34,7 +34,10 @@ HUBERT_ID = "facebook/hubert-base-ls960"
 
 
 def configure_precision():
-    """Full fp32 on GPU: TF32 would change the CNN encoder's numerics vs CPU."""
+    """Full fp32 on GPU: TF32 would change the CNN encoder's numerics vs CPU.
+
+    A no-op on prod's Titan V (Volta has no TF32), kept so other GPUs behave the same.
+    """
     torch.backends.cudnn.allow_tf32 = False
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.set_float32_matmul_precision("highest")

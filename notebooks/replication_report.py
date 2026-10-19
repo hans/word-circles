@@ -60,7 +60,8 @@ if not is_full_run:
 #   and selection only admits configs with none.
 # - **Smoke run** uses 100 utterances per split, not ~300 (#5). 300 measured ~4 GB and more
 #   than 10 min of extraction alone.
-# - **CUDA wheels:** cu126 is provisional until checked against prod's driver.
+# - **CUDA wheels:** prod extracts on Titan V (Volta) with torch's cu126 build, because the
+#   cu13x builds have no Volta kernels. Volta has no TF32, so the TF32-off flags have no effect there.
 
 # %% [markdown]
 # ## Table II

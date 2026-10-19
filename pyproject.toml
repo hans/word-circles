@@ -32,8 +32,9 @@ packages = ["src/word_circles"]
 
 [tool.uv.sources]
 concept-analysis = { git = "https://github.com/burin-n/word_timing_trajectory", rev = "e36e7e684ba7c7b43f349420006ebfd3ef0e2a9e" }
-# CPU wheels on the aarch64 dev box, CUDA wheels on x86_64 prod. cu126 is
-# provisional: confirm against the driver in prod's `nvidia-smi` header.
+# CPU wheels on the aarch64 dev box, CUDA wheels on x86_64 prod. Prod has Titan V
+# (Volta, sm_70) on a CUDA 13 driver: torch's cu13x wheels start at Turing (sm_75),
+# so stay on cu126, the newest build with Volta kernels.
 torch = [
     { index = "pytorch-cpu", marker = "platform_machine == 'aarch64'" },
     { index = "pytorch-cu126", marker = "platform_machine == 'x86_64'" },
