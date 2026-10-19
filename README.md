@@ -15,6 +15,6 @@ uv run pytest
 
 Rules call `python` directly; never run several `uv run` commands at once, because they deadlock on uv's lock.
 
-`HF_HOME` (and `XDG_CACHE_HOME` for Snakemake) must point at writable directories. Without it, `transformers` and Snakemake fail when the default caches under `$HOME` are read-only.
+`HF_HOME`, `XDG_CACHE_HOME` (Snakemake) and `MPLCONFIGDIR` must point at writable directories. Without it, `transformers` and Snakemake fail when the default caches under `$HOME` are read-only.
 
 Tests marked `data` need the fetched TextGrids (`uv run snakemake -j1 data/textgrids/dev`). The `gpu` test is a one-off CPU-vs-GPU parity check to run on prod.

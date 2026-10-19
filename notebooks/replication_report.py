@@ -72,7 +72,7 @@ untrained = {}
 for model in random_models:
     rows = {}
     for est in ("cpca", "leace"):
-        table = pd.read_csv(out / "tables" / "roseg" / f"{est}_{model}.csv").query("variant == 'selected'")
+        table = pd.read_csv(out / "tables" / "roseg" / f"{est}_{model}.csv").query("variant == 'selected' and split in ['dev', 'test']")
         for r in table.itertuples():
             rows[(r.split, est)] = {m: 100 * getattr(r, m) for m in acceptance.METRICS}
     untrained[model] = rows
@@ -128,9 +128,20 @@ pd.DataFrame(kaldi).T.round(2)
 # %%
 acceptance.empty_counts(out)
 
+# %% [markdown]
+# Widened-grid diagnostic: runs on the full grid only, for selections on a grid edge.
+
 # %%
-widened = selections[selections["variant"] == "widened"]
-widened if len(widened) else "no selection sat on a grid edge: widened-grid diagnostic not run"
+import json
+
+edges = []
+for model in ["hubert-base-ls960", *random_models]:
+    for est in ("cpca", "leace"):
+        sel = json.loads((out / "roseg" / "tune" / est / model / "selection.json").read_text())
+        edges.append({"model": model, "subspace": est, "on_grid_edge": sel["on_grid_edge"],
+                      "widened_run": "widened" in sel})
+display(pd.DataFrame(edges))
+selections[selections["variant"] == "widened"]
 
 # %%
 dissim_retune = out / "tables" / "dissim_retune.csv"

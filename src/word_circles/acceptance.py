@@ -100,8 +100,10 @@ def drift_diagnosis(comparison):
     out = []
     for est in ("cpca", "leace"):
         for split in ("dev", "test"):
-            tuned = comparison.query("split == @split and row == @f'ssl_{est}'")["in_band"].item()
-            authors = comparison.query("split == @split and row == @f'ssl_{est}_authors_config'")["in_band"].item()
+            def in_band(row):
+                return comparison.loc[(comparison["split"] == split) & (comparison["row"] == row), "in_band"].item()
+
+            tuned, authors = in_band(f"ssl_{est}"), in_band(f"ssl_{est}_authors_config")
             verdict = ("pass" if tuned and authors else "tuning drift" if authors
                        else "feature or fitting drift" if not tuned else "authors' config out of band only")
             out.append({"subspace": est, "split": split, "tuned_in_band": tuned,
