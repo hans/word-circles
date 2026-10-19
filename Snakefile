@@ -5,10 +5,15 @@ DATA = config["data_dir"]
 TP = config["third_party_dir"]
 SPLITS = ["dev", "test", "train"]
 
+wildcard_constraints:
+    split="dev|test|train",
+    method="[a-z0-9_]+?",
+
 
 rule all:
     input:
-        f"{OUT}/tables/gold_syllables_dev.csv",
+        f"{OUT}/scores/gold_syllables_dev.csv",
+        f"{OUT}/scores/fig6/gold_syllables_dev.csv",
         expand(f"{OUT}/utts/{{split}}.txt", split=SPLITS),
 
 
@@ -97,9 +102,32 @@ rule select_utterances:
 rule gold_syllables:
     input:
         refs=f"{OUT}/refs/{{split}}",
+    output:
+        f"{OUT}/predictions/gold_syllables_{{split}}.json",
+    shell:
+        "python -m word_circles.gold {input.refs} {output}"
+
+
+rule score:
+    input:
+        predictions=f"{OUT}/predictions/{{method}}_{{split}}.json",
+        refs=f"{OUT}/refs/{{split}}",
         evaluator=f"{TP}/evaluation",
     output:
-        scores=f"{OUT}/tables/gold_syllables_{{split}}.csv",
-        empty=f"{OUT}/tables/gold_syllables_{{split}}.empty.json",
+        scores=f"{OUT}/scores/{{method}}_{{split}}.csv",
+        empty=f"{OUT}/scores/{{method}}_{{split}}.empty.json",
     shell:
-        "python -m word_circles.gold {input.refs} {input.evaluator} {output.scores} {output.empty}"
+        "python -m word_circles.evaluation {input.predictions} {input.refs} {input.evaluator}"
+        " {output.scores} {output.empty} --method {wildcards.method}"
+
+
+rule score_fig6:
+    input:
+        predictions=f"{OUT}/predictions/{{method}}_dev.json",
+        refs=f"{OUT}/refs/dev",
+        evaluator=f"{TP}/evaluation",
+    output:
+        f"{OUT}/scores/fig6/{{method}}_dev.csv",
+    shell:
+        "python -m word_circles.fig6 {input.predictions} {input.refs} {input.evaluator} {output}"
+        " --method {wildcards.method}"
