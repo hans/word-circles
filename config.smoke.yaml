@@ -1,0 +1,3 @@
+# Local CPU smoke run: plumbing only, no acceptance judgments.
+out_dir: outputs_smoke
+n_utts: 300

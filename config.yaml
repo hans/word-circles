@@ -1,0 +1,36 @@
+# Full replication run (prod). Smoke overrides keys via config.smoke.yaml.
+out_dir: outputs
+data_dir: data
+third_party_dir: third_party
+# null = every utterance in the split
+n_utts: null
+
+third_party:
+  evaluation:
+    url: https://github.com/s-malan/evaluation
+    rev: c9074a4256ad56caa2f2acaa00af0345f040e398
+  prom_wordseg:
+    url: https://github.com/s-malan/prom-wordseg
+    rev: 4e210251bd20e2f867563529d51eeef807a73555
+  wtt:
+    url: https://github.com/burin-n/word_timing_trajectory
+    rev: e36e7e684ba7c7b43f349420006ebfd3ef0e2a9e
+
+librispeech:
+  url: https://www.openslr.org/resources/12
+  splits:
+    dev: dev-clean
+    test: test-clean
+    train: train-clean-100
+
+# Kaldi word alignments, relative to the WTT clone.
+alignments:
+  dev: alignments/Librispeech/dev-clean-word.ali
+  test: alignments/Librispeech/test-clean-word.ali
+  train: alignments/Librispeech/train-clean-100sampled_10h_utt-word.ali
+
+# Expected utterance counts; the full run asserts them exactly.
+expected_utts:
+  dev: 2703
+  test: 2620
+  train: 2834
