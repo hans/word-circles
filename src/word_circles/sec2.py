@@ -1,0 +1,87 @@
+"""§II figures from the authors' metric table: Fig 2 panels and Fig 3 layer curves."""
+
+import argparse
+import shutil
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import pandas as pd
+
+TRAINED = "hubert-base-ls960"
+RANDOM_PREFIX = "hubert-base-random-s"
+PRIMARY_RANDOM = f"{RANDOM_PREFIX}0"
+LOGMEL = "logmel"
+FIG1A_LAYER = 9
+
+
+def best_layers(table):
+    """Layer with the highest in-sample (dev-clean) R² per model: the Fig 2 panel rule."""
+    rows = table.loc[table.groupby("model_name")["r2_train"].idxmax()]
+    return dict(zip(rows["model_name"], rows["layer_id"].astype(int)))
+
+
+def fig2(table_path, trajectories_dir, out_dir):
+    """Collect each model's trajectory plots at its best-R² layer (log Mel has only layer 0), plus Fig 1a."""
+    table = pd.read_csv(table_path)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    chosen = best_layers(table)
+    for model, layer in chosen.items():
+        model_dir = Path(trajectories_dir) / model
+        pattern = "*" if model == LOGMEL else f"*_layer{layer:02d}*"
+        plots = sorted(p for p in model_dir.rglob(pattern) if p.is_file() and not p.name.startswith("."))
+        if not plots:
+            raise FileNotFoundError(f"no trajectory plots matching {pattern} under {model_dir}")
+        for plot in plots:
+            shutil.copy(plot, out_dir / f"{model}_{plot.parent.name}_{plot.name}")
+    # Fig 1a: the trained model's L9 circle, whatever its best layer.
+    for plot in sorted((Path(trajectories_dir) / TRAINED).rglob(f"*_layer{FIG1A_LAYER:02d}*")):
+        shutil.copy(plot, out_dir / f"fig1a_{plot.parent.name}_{plot.name}")
+    pd.Series(chosen, name="layer_id").rename_axis("model_name").to_csv(out_dir / "layers.csv")
+
+
+def fig3(table_path, out_path):
+    """R² and completion% per layer: trained, untrained seed 0 (seed range shaded), log Mel marker."""
+    table = pd.read_csv(table_path)
+    table["completion"] = 100 * table["endpoint_completion"]
+    random = table[table["model_name"].str.startswith(RANDOM_PREFIX)]
+    fig, axes = plt.subplots(1, 2, figsize=(9, 3.4))
+    for ax, column, label in ((axes[0], "r2_train", "R²"), (axes[1], "completion", "completion %")):
+        trained = table[table["model_name"] == TRAINED].sort_values("layer_id")
+        ax.plot(trained["layer_id"], trained[column], "o-", label="HuBERT")
+        primary = random[random["model_name"] == PRIMARY_RANDOM].sort_values("layer_id")
+        ax.plot(primary["layer_id"], primary[column], "^:", label="Unt. HuBERT (seed 0)")
+        if random["model_name"].nunique() > 1:
+            spread = random.groupby("layer_id")[column].agg(["min", "max"])
+            ax.fill_between(spread.index, spread["min"], spread["max"], alpha=0.2, color=ax.lines[-1].get_color(),
+                            label="Unt. seed range")
+        logmel = table[table["model_name"] == LOGMEL]
+        if not logmel.empty:
+            ax.axhline(logmel[column].iloc[0], color="gray", ls="--", lw=1, label="log Mel")
+        ax.set_xlabel("layer")
+        ax.set_ylabel(label)
+    axes[0].legend(fontsize=8)
+    fig.tight_layout()
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    sub = parser.add_subparsers(dest="command", required=True)
+    f2 = sub.add_parser("fig2")
+    f2.add_argument("table", type=Path)
+    f2.add_argument("trajectories_dir", type=Path)
+    f2.add_argument("out_dir", type=Path)
+    f3 = sub.add_parser("fig3")
+    f3.add_argument("table", type=Path)
+    f3.add_argument("out", type=Path)
+    args = parser.parse_args()
+    if args.command == "fig2":
+        fig2(args.table, args.trajectories_dir, args.out_dir)
+    else:
+        fig3(args.table, args.out)
+
+
+if __name__ == "__main__":
+    main()

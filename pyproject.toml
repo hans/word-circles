@@ -5,6 +5,11 @@ requires-python = ">=3.13"
 dependencies = [
     "concept-analysis",
     "numpy>=2.4.6",
+    "ipykernel>=6",
+    "jupytext>=1.16",
+    "matplotlib>=3.9",
+    "pandas>=2.2",
+    "ploomber-engine>=0.0.33",
     "praat-textgrids>=1.4",
     "pyyaml>=6",
     "snakemake>=9",
@@ -27,14 +32,30 @@ packages = ["src/word_circles"]
 
 [tool.uv.sources]
 concept-analysis = { git = "https://github.com/burin-n/word_timing_trajectory", rev = "e36e7e684ba7c7b43f349420006ebfd3ef0e2a9e" }
-torch = { index = "pytorch-cpu" }
-torchaudio = { index = "pytorch-cpu" }
+# CPU wheels on the aarch64 dev box, CUDA wheels on x86_64 prod. cu126 is
+# provisional: confirm against the driver in prod's `nvidia-smi` header.
+torch = [
+    { index = "pytorch-cpu", marker = "platform_machine == 'aarch64'" },
+    { index = "pytorch-cu126", marker = "platform_machine == 'x86_64'" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", marker = "platform_machine == 'aarch64'" },
+    { index = "pytorch-cu126", marker = "platform_machine == 'x86_64'" },
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["data: needs fetched data under data/ (run the fetch rules first)"]
+markers = [
+    "data: needs fetched data under data/ (run the fetch rules first)",
+    "gpu: one-off CUDA check, run on prod",
+]
