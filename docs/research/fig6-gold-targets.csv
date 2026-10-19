@@ -1,0 +1,29 @@
+group,metric,value,uncertainty,method
+all,F1,87.9,1.0,segment-extrapolation
+1,F1,98.2,1.0,segment-extrapolation
+2,F1,79.3,1.0,segment-extrapolation
+3,F1,66.1,1.0,segment-extrapolation
+4,F1,56.9,1.0,segment-extrapolation
+5,F1,50.4,1.0,segment-extrapolation
+6,F1,44.9,1.0,segment-extrapolation
+all,OS,27.5,2.0,segment-extrapolation
+1,OS,-1.5,3.0,segment-extrapolation (marker occluded)
+2,OS,55.2,2.0,segment-extrapolation
+3,OS,104.0,2.0,segment-extrapolation
+4,OS,152.4,2.0,segment-extrapolation
+5,OS,201.5,2.0,segment-extrapolation
+6,OS,251.3,2.0,segment-extrapolation
+all,TokenF1,71.0,1.0,segment-extrapolation
+1,TokenF1,97.7,1.0,segment-extrapolation
+2,TokenF1,36.7,2.0,segment-extrapolation (marker partly occluded)
+3,TokenF1,32.6,1.0,segment-extrapolation
+4,TokenF1,28.5,1.0,segment-extrapolation
+5,TokenF1,25.0,1.5,segment-extrapolation
+6,TokenF1,23.7,1.5,segment-extrapolation
+all,R,78.6,1.5,segment-extrapolation
+1,R,97.0,1.5,segment-extrapolation
+2,R,54.4,3.0,segment-extrapolation (marker occluded)
+3,R,12.3,1.5,segment-extrapolation
+4,R,-29.3,1.5,segment-extrapolation
+5,R,-70.5,1.5,segment-extrapolation
+6,R,-112.8,1.5,segment-extrapolation
