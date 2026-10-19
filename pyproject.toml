@@ -1,0 +1,62 @@
+[project]
+name = "word-circles"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "concept-analysis",
+    "numpy>=2.4.6",
+    "ipykernel>=6",
+    "jupytext>=1.16",
+    "matplotlib>=3.9",
+    "pandas>=2.2",
+    "ploomber-engine>=0.0.33",
+    "praat-textgrids>=1.4",
+    "pyyaml>=6",
+    "snakemake>=9",
+    "soundfile>=0.14.0",
+    "torch>=2.14.1",
+    "torchaudio>=2.11.0",
+    "tqdm>=4.66",
+    "transformers>=5.20.1",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/word_circles"]
+
+[tool.uv.sources]
+concept-analysis = { git = "https://github.com/burin-n/word_timing_trajectory", rev = "e36e7e684ba7c7b43f349420006ebfd3ef0e2a9e" }
+# CPU wheels on the aarch64 dev box, CUDA wheels on x86_64 prod. Prod has Titan V
+# (Volta, sm_70) on a CUDA 13 driver: torch's cu13x wheels start at Turing (sm_75),
+# so stay on cu126, the newest build with Volta kernels.
+torch = [
+    { index = "pytorch-cpu", marker = "platform_machine == 'aarch64'" },
+    { index = "pytorch-cu126", marker = "platform_machine == 'x86_64'" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", marker = "platform_machine == 'aarch64'" },
+    { index = "pytorch-cu126", marker = "platform_machine == 'x86_64'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "data: needs fetched data under data/ (run the fetch rules first)",
+    "gpu: one-off CUDA check, run on prod",
+]

@@ -1,0 +1,67 @@
+# Full replication run (prod). Smoke overrides keys via config.smoke.yaml.
+out_dir: outputs
+data_dir: data
+third_party_dir: third_party
+# null = every utterance in the split
+n_utts: null
+# Feature cache root (~350 GB on the full run); null = <out_dir>/cache
+cache_dir: null
+
+features:
+  device: cuda
+  hf_revision: dba3bb02fda4248b6e082697eee756de8fe8aa8a
+  do_normalize: true
+  random_seeds: [0, 1, 2]
+  # §II sweeps every layer on dev/test; RoSeg fits on train L9 only.
+  layers_eval: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  layers_train: [9]
+
+third_party:
+  evaluation:
+    url: https://github.com/s-malan/evaluation
+    rev: c9074a4256ad56caa2f2acaa00af0345f040e398
+  prom_wordseg:
+    url: https://github.com/s-malan/prom-wordseg
+    rev: 4e210251bd20e2f867563529d51eeef807a73555
+  wtt:
+    url: https://github.com/burin-n/word_timing_trajectory
+    rev: e36e7e684ba7c7b43f349420006ebfd3ef0e2a9e
+
+librispeech:
+  # openslr.org mirror; www.openslr.org measured ~10x slower from the dev box.
+  url: https://openslr.elda.org/resources/12
+  splits:
+    dev: dev-clean
+    test: test-clean
+    train: train-clean-100
+
+# Kaldi word alignments, relative to the WTT clone.
+alignments:
+  dev: alignments/Librispeech/dev-clean-word.ali
+  test: alignments/Librispeech/test-clean-word.ali
+  train: alignments/Librispeech/train-clean-100sampled_10h_utt-word.ali
+
+# Expected utterance counts; the full run asserts them exactly.
+expected_utts:
+  dev: 2703
+  test: 2620
+  train: 2834
+
+# §II word circles (authors' fit/metric scripts, Centroid-PCA = WTT's Z_CPCA)
+sec2:
+  min_dur: 0.1
+  max_dur: 0.7
+  # duration groups with fewer tokens are dropped
+  low_freq_threshold: 50
+
+# §III RoSeg on L9. null grid = the authors' 300 configs (+ widened diagnostic on edge picks).
+roseg:
+  layer: 9
+  grid: null
+
+# Dissim. baseline: Malan24 settings, not re-tuned. `retune` adds the band-miss diagnostic side row.
+dissim:
+  layer: 9
+  window: 4
+  prominence: 0.75
+  retune: false
