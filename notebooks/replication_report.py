@@ -37,6 +37,32 @@ if not is_full_run:
     print("SMOKE RUN: subset of utterances; no verdict below is an acceptance judgment.")
 
 # %% [markdown]
+# ## Documented deviations and assumptions
+#
+# - **Untrained HuBERT:** the authors' init and seed are unpublished. We use HF default
+#   init of the full `HubertModel` from the ls960 config, seeds 0-2 (seed 0 primary), each
+#   frozen to a safetensors file. These rows are judged qualitatively only.
+# - **Log Mel:** the recipe is ours (80 mel, power 2, `log(x + 1e-6)`, no normalisation;
+#   unlike the sister repo, a log is applied). #10 assumed `n_fft=512, center=False` already
+#   gives HuBERT's frame count. It does not: it gives `(N-512)//320+1`. So the input is
+#   zero-padded by 56 samples on each side, which puts window k exactly on HuBERT frame k.
+# - **Fig 6 scoring** was locked after the fact (#15). None of the 4 pre-registered candidates
+#   fit. The locked rule is the evaluator's formulas without its last-boundary drop, with
+#   `all` = groups 1-6 pooled.
+# - **Alignments:** subspaces are fit on the authors' Kaldi `.ali` files and scored against the
+#   s-malan TextGrids (sd of the offset ≈ 30 ms), as the authors did. The Kaldi-reference
+#   rescoring below measures the effect.
+# - **Evaluator:** the authors ran an edited copy (`--alignment_type=word`). We run the
+#   unmodified evaluator at `c9074a4` with `--alignment_type=words`; scoring is unchanged
+#   across those versions. Its printed metrics are parsed by our wrapper, not by WTT's gather
+#   script.
+# - **Empty predictions** get a placeholder boundary at 0.02 s. Every count is tabulated below,
+#   and selection only admits configs with none.
+# - **Smoke run** uses 100 utterances per split, not ~300 (#5). 300 measured ~4 GB and more
+#   than 10 min of extraction alone.
+# - **CUDA wheels:** cu126 is provisional until checked against prod's driver.
+
+# %% [markdown]
 # ## Table II
 
 # %%

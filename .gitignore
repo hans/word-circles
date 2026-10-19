@@ -4,4 +4,4 @@ __pycache__/
 /data/
 /outputs/
 /.snakemake/
-/outputs_smoke/
+/outputs_smoke*/
