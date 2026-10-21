@@ -2,6 +2,7 @@
 __pycache__/
 .snakemake
 
-data
-outputs
-third_party
+/third_party/
+/data/
+/outputs/
+/outputs_smoke*/
