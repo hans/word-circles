@@ -1,17 +1,49 @@
-"""§II figures from the authors' metric table: Fig 2 panels and Fig 3 layer curves."""
+"""§II figures from the authors' metric table (Fig 2 panels, Fig 3 layer curves) and the R² unwrap diagnostic."""
 
 import argparse
 import shutil
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
+from concept_analysis.projector import PCAProjection
+from concept_analysis.trajectory.geometry import get_mean_trajectory_angles
+from concept_analysis.trajectory.metrics import get_elapsed_angle_regression_features
+from sklearn.linear_model import LinearRegression
 
 TRAINED = "hubert-base-ls960"
 RANDOM_PREFIX = "hubert-base-random-s"
 PRIMARY_RANDOM = f"{RANDOM_PREFIX}0"
 LOGMEL = "logmel"
 FIG1A_LAYER = 9
+
+
+def unwrap_diagnostic(subspaces_dir):
+    """Per-layer in-sample R² with and without the duration groups whose unwrapped angle steps against the rotation.
+
+    Short groups (5-7 frames) need near-π steps per frame for a full turn, so np.unwrap can take the short way
+    round. The authors' metric keeps them; this side table shows how much of the R² drop they carry.
+    """
+    rows = []
+    layer_dirs = [p for p in Path(subspaces_dir).iterdir() if p.is_dir() and p.name.isdigit()]
+    for layer_dir in sorted(layer_dirs, key=lambda p: int(p.name)):
+        subspace = PCAProjection.load(layer_dir / "temporal_subspace.pkl")
+        with np.load(layer_dir / "mean_trajectories.npz") as z:
+            groups = {int(k): z[k].astype(np.float64) for k in z.keys()}
+        angles = get_mean_trajectory_angles(subspace, groups, "centroid")
+        r2, slope = _polar_fit(angles)
+        flipped = [n for n, theta in angles.items() if (np.sign(np.diff(np.unwrap(theta))) != np.sign(slope)).any()]
+        kept = {n: theta for n, theta in angles.items() if n not in flipped}
+        rows.append({"layer_id": int(layer_dir.name), "r2_train": r2, "r2_without_flipped": _polar_fit(kept)[0],
+                     "flipped_groups": flipped})
+    return pd.DataFrame(rows)
+
+
+def _polar_fit(angles):
+    elapsed, angle = get_elapsed_angle_regression_features(angles, flatten=True)
+    model = LinearRegression(fit_intercept=False).fit(angle, elapsed)
+    return model.score(angle, elapsed), model.coef_[0, 0]
 
 
 def best_layers(table):

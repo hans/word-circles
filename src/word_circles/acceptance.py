@@ -12,7 +12,7 @@ import pandas as pd
 
 METRICS = ["F1", "OS", "token_F1", "R"]
 BANDS = {"F1": 2.0, "OS": 3.0, "token_F1": 2.0, "R": 2.0}
-R2_L9_PAPER, R2_BAND = 0.983, 0.005
+R2_BEST_PAPER, R2_BAND = 0.983, 0.005
 TRAINED = "hubert-base-ls960"
 
 # Paper Table II: (split, row) -> F1, OS, Tok F1, R-val.
@@ -111,7 +111,7 @@ def drift_diagnosis(comparison):
     return pd.DataFrame(out)
 
 
-def ordering_claims(ours, untrained_by_seed, sec2):
+def ordering_claims(ours, untrained_by_seed):
     """Every ordering claim that must hold regardless of the bands.
 
     `untrained_by_seed` maps a random model name to its {(split, est): scores}.
@@ -149,17 +149,16 @@ def ordering_claims(ours, untrained_by_seed, sec2):
                 min(gaps) >= 10 and abs(ssl["OS"]) < abs(unt["OS"]),
                 f"min gap {min(gaps):.1f}; |OS| {abs(ssl['OS']):.1f} vs {abs(unt['OS']):.1f}")
 
-    trained = sec2[sec2["model_name"] == TRAINED]
-    best = trained["r2_train"].max()
-    r2_l9 = trained.loc[trained["layer_id"] == 9, "r2_train"].item()
-    add("§II: L9 at or near the best-R² layer (within 0.01)", best - r2_l9 <= 0.01,
-        f"L9 {r2_l9:.4f}, best {best:.4f} (L{int(trained.loc[trained['r2_train'].idxmax(), 'layer_id'])})")
     return pd.DataFrame(claims)
 
 
-def r2_l9_check(sec2):
-    r2 = sec2.loc[(sec2["model_name"] == TRAINED) & (sec2["layer_id"] == 9), "r2_train"].item()
-    return {"r2_l9": r2, "paper": R2_L9_PAPER, "in_band": abs(r2 - R2_L9_PAPER) <= R2_BAND}
+def r2_best_check(sec2):
+    """HuBERT best-layer R² against the paper's 0.983 (Fig 3 marks L1); L9, the Fig 1a layer, shown alongside."""
+    trained = sec2[sec2["model_name"] == TRAINED].set_index("layer_id")
+    best_layer = int(trained["r2_train"].idxmax())
+    r2 = trained.loc[best_layer, "r2_train"]
+    return {"best_layer": best_layer, "r2_best": r2, "paper": R2_BEST_PAPER,
+            "in_band": abs(r2 - R2_BEST_PAPER) <= R2_BAND, "r2_l9": trained.loc[9, "r2_train"]}
 
 
 def qualitative_sec2(sec2, random_models):

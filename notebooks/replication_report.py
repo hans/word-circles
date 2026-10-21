@@ -56,6 +56,13 @@ if not is_full_run:
 #   unmodified evaluator at `c9074a4` with `--alignment_type=words`; scoring is unchanged
 #   across those versions. Its printed metrics are parsed by our wrapper, not by WTT's gather
 #   script.
+# - **§II R² = 0.983 is the best layer (L1), not L9.** Spec #16 attached the paper's 0.983 to L9,
+#   the Fig 1a layer. Three things say otherwise: the paper's own Fig 1a polar panel shows the
+#   same two short-duration groups unwrapping the wrong way as ours does, which caps L9 near
+#   0.87 under the authors' metric; the paper's Fig 3 marks HuBERT's best R² at L1; and our
+#   per-layer R² matches the paper's Fig 3 trace layer by layer (L1 0.983, L4-6 ≈ 0.76, L9 ≈
+#   0.87). The check now compares the best layer. The ordering claim "L9 at or near the
+#   best-R² layer" came from the same misreading and is retracted.
 # - **Empty predictions** get a placeholder boundary at 0.02 s. Every count is tabulated below,
 #   and selection only admits configs with none.
 # - **Smoke run** uses 100 utterances per split, not ~300 (#5). 300 measured ~4 GB and more
@@ -104,15 +111,15 @@ for model in random_models:
             rows[(r.split, est)] = {m: 100 * getattr(r, m) for m in acceptance.METRICS}
     untrained[model] = rows
 sec2 = pd.read_csv(out / "tables" / "sec2_metrics.csv")
-acceptance.ordering_claims(ours, untrained, sec2)
+acceptance.ordering_claims(ours, untrained)
 
 # %% [markdown]
 # ## §II
 #
-# HuBERT L9 R² is in the numeric tier (paper 0.983 ± 0.005). The rest is qualitative.
+# HuBERT best-layer R² is in the numeric tier (paper 0.983 ± 0.005). The rest is qualitative.
 
 # %%
-acceptance.r2_l9_check(sec2)
+acceptance.r2_best_check(sec2)
 
 # %%
 acceptance.qualitative_sec2(sec2, random_models)
@@ -122,6 +129,16 @@ sec2.pivot_table(index="layer_id", columns="model_name", values=["r2_train", "r2
 
 # %%
 display(Image(str(out / "figures" / "fig3.png")))
+
+# %% [markdown]
+# Unwrap diagnostic (not the authors' metric): R² with the duration groups whose unwrapped
+# angle steps against the rotation dropped. These are 5-7 frame groups, where a full turn
+# needs near-π steps. They account for the jagged trained-HuBERT layer curve.
+
+# %%
+from word_circles.sec2 import unwrap_diagnostic
+
+unwrap_diagnostic(out / "sec2" / "subspaces" / acceptance.TRAINED)
 
 # %% [markdown]
 # Untrained seed range (side table, no acceptance criteria except the ordering claim above).

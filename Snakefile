@@ -475,6 +475,7 @@ rule replication_report:
         roseg=expand(f"{OUT}/tables/roseg/{{est}}_{{model}}.csv", est=["cpca", "leace"], model=HUBERT_MODELS),
         sec2=f"{OUT}/tables/sec2_metrics.csv",
         fig3=f"{OUT}/figures/fig3.png",
+        sec2_fit=f"{OUT}/sec2/subspaces/hubert-base-ls960",
         fig6=f"{OUT}/figures/fig6.png",
         gold=f"{OUT}/scores/gold_syllables_dev.csv",
         dissim=expand(f"{OUT}/scores/dissim_{{split}}.csv", split=["dev", "test"]),
