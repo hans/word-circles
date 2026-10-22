@@ -1,7 +1,8 @@
-.venv/
+.venv
 __pycache__/
+.snakemake
+
 /third_party/
 /data/
 /outputs/
-/.snakemake/
 /outputs_smoke*/
