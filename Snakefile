@@ -402,11 +402,11 @@ rule roseg_report:
     params:
         dev=lambda w, input: os.path.dirname(input.dev),
         test=lambda w, input: os.path.dirname(input.test),
-        trained=lambda w: "--authors-check" if w.model == "hubert-base-ls960" else "",
+        kind=lambda w: "trained" if w.model == "hubert-base-ls960" else "untrained",
     shell:
         "python -m word_circles.roseg report {input.subspace} {input.selection} {params.dev} {params.test}"
         " {input.dev_utts} {input.test_utts} {input.dev_refs} {input.test_refs} {input.evaluator} {output}"
-        " --estimator {wildcards.est} {params.trained} --kaldi-refs {input.kaldi_refs}"
+        " --estimator {wildcards.est} --authors-check {params.kind} --kaldi-refs {input.kaldi_refs}"
 
 
 rule roseg_predictions:

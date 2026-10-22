@@ -63,6 +63,12 @@ if not is_full_run:
 #   per-layer R² matches the paper's Fig 3 trace layer by layer (L1 0.983, L4-6 ≈ 0.76, L9 ≈
 #   0.87). The check now compares the best layer. The ordering claim "L9 at or near the
 #   best-R² layer" came from the same misreading and is retracted.
+# - **Dissim. OS is about 4 points high** (dev +0.7 vs −3.3, test +1.9 vs −2.0). F1, token F1 and
+#   R match within 0.5. The re-tune diagnostic picks Malan24's own setting (w=4, p=0.75) as the
+#   best dev R-value, so re-tuning does not explain it; we predict about 4% more boundaries for an
+#   unrecovered reason. The row is accepted as replicated with this deviation.
+# - **Untrained seed 1** has best R² 0.747, below the 0.8 "high" mark of the qualitative check.
+#   This is accepted as seed variation; the paper's own untrained curve ranges ~0.75-0.87.
 # - **Empty predictions** get a placeholder boundary at 0.02 s. Every count is tabulated below,
 #   and selection only admits configs with none.
 # - **Smoke run** uses 100 utterances per split, not ~300 (#5). 300 measured ~4 GB and more
@@ -157,6 +163,25 @@ if len(random_models) > 1:
     unt = sec2[sec2["model_name"].isin(random_models)]
     display(unt.groupby("layer_id")[["r2_train", "endpoint_completion"]].agg(["min", "max"]))
     display(pd.concat({m: pd.DataFrame(r).T for m, r in untrained.items()}))
+
+# %% [markdown]
+# Untrained rows under the authors' shipped untrained configs (CPCA p=0.175, w=2, θ=π/4; LEACE
+# p=0.698, w=3, θ=π/4), next to our tuned selection and the paper. If F1 falls toward the paper's
+# 13-17 and OS turns strongly negative, the gap is hyperparameters; if not, it is the features.
+
+# %%
+rows = []
+for model in random_models:
+    for est in ("cpca", "leace"):
+        t = acceptance._roseg_rows(out, est, model)
+        for split in ("dev", "test"):
+            for variant in ("selected", "authors"):
+                rows.append({"model": model, "subspace": est, "split": split, "variant": variant,
+                             **{m: t[(split, variant)][m] for m in acceptance.METRICS}})
+for est in ("cpca", "leace"):
+    rows.append({"model": "paper", "subspace": est, "split": "dev", "variant": "paper",
+                 **dict(zip(acceptance.METRICS, acceptance.PAPER_TABLE_II[("dev", f"unt_{est}")]))})
+pd.DataFrame(rows).sort_values(["subspace", "split", "model"]).round(1)
 
 # %% [markdown]
 # ## Fig 6 (trend only)

@@ -112,10 +112,16 @@ def fit_leace_chunked(X_group, chunk_frames=LEACE_CHUNK_FRAMES):
     return projection._set_fitted_eraser(fitter.eraser, classes)
 
 
-# Configs the authors shipped for trained HuBERT L9 (their dev selections).
+# Configs the authors shipped for HuBERT L9 (their dev selections), trained and untrained.
 AUTHORS_CONFIGS = {
-    "leace": {"prominence": 0.175, "smooth_window_size": 3, "threshold_max_angle": math.pi / 4},
-    "cpca": {"prominence": 0.349, "smooth_window_size": 2, "threshold_max_angle": math.pi / 3},
+    "trained": {
+        "leace": {"prominence": 0.175, "smooth_window_size": 3, "threshold_max_angle": math.pi / 4},
+        "cpca": {"prominence": 0.349, "smooth_window_size": 2, "threshold_max_angle": math.pi / 3},
+    },
+    "untrained": {
+        "leace": {"prominence": 0.698, "smooth_window_size": 3, "threshold_max_angle": math.pi / 4},
+        "cpca": {"prominence": 0.175, "smooth_window_size": 2, "threshold_max_angle": math.pi / 4},
+    },
 }
 ESTIMATORS = {"cpca": ("Z_CPCA", PCAProjection), "leace": ("LEACE", LEACEProjection)}
 FRAME_RATE = 50.0
@@ -231,8 +237,10 @@ def find_config(configs, target):
 
 
 def report(subspace_dir, selection_json, estimator, caches, utts, refs, evaluator_dir, out_csv,
-           authors_check=False, kaldi_refs=None):
+           authors_check=None, kaldi_refs=None):
     """Score every reported variant (selection, ablations, diagnostics) on dev and test.
+
+    `authors_check` ("trained" or "untrained") adds the authors' shipped config for that model kind.
 
     With `kaldi_refs`, the selected config and its theta = pi partner are also
     scored on test against Kaldi-derived references (split `test_kaldi`).
@@ -241,7 +249,7 @@ def report(subspace_dir, selection_json, estimator, caches, utts, refs, evaluato
     variants = {k: selection[k] for k in ("selected", "no_threshold", "no_threshold_retuned", "widened")
                 if k in selection}
     if authors_check:
-        variants["authors"] = find_config(grid(), AUTHORS_CONFIGS[estimator])
+        variants["authors"] = find_config(grid(), AUTHORS_CONFIGS[authors_check][estimator])
     subspace, layer = load_subspace(subspace_dir)
     rows = []
     for split in ("dev", "test"):
@@ -282,7 +290,7 @@ def main():
                  "dev_refs", "test_refs", "evaluator_dir", "out_csv"):
         rep.add_argument(name, type=Path)
     rep.add_argument("--estimator", choices=ESTIMATORS, required=True)
-    rep.add_argument("--authors-check", action="store_true")
+    rep.add_argument("--authors-check", choices=AUTHORS_CONFIGS)
     rep.add_argument("--kaldi-refs", type=Path, help="Kaldi-derived test references for the diagnostic")
     pre = sub.add_parser("predict", help="write one selected variant's predictions")
     pre.add_argument("subspace_dir", type=Path)
