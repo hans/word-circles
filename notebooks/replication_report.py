@@ -41,7 +41,12 @@ if not is_full_run:
 #
 # - **Untrained HuBERT:** the authors' init and seed are unpublished. We use HF default
 #   init of the full `HubertModel` from the ls960 config, seeds 0-2 (seed 0 primary), each
-#   frozen to a safetensors file. These rows are judged qualitatively only.
+#   frozen to a safetensors file. These rows are judged qualitatively only. Our untrained
+#   RoSeg F1 is 28-31 on every seed and config against the paper's 13-17. Under the authors'
+#   shipped untrained configs, LEACE under-segments as in the paper (OS ≈ −38 vs −32.5) but F1
+#   stays at ~25, and CPCA over-segments (OS ≈ +25 vs −54). So the gap is in the features, most
+#   likely the unpublished init, not in tuning or seed. Untrained is still far below trained on
+#   F1, token F1 and R in every row; only the paper's |OS| ordering is not reproduced.
 # - **Log Mel:** the recipe is ours (80 mel, power 2, `log(x + 1e-6)`, no normalisation;
 #   unlike the sister repo, a log is applied). #10 assumed `n_fft=512, center=False` already
 #   gives HuBERT's frame count. It does not: it gives `(N-512)//320+1`. So the input is
