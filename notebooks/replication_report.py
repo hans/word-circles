@@ -138,7 +138,16 @@ display(Image(str(out / "figures" / "fig3.png")))
 # %%
 from word_circles.sec2 import unwrap_diagnostic
 
-unwrap_diagnostic(out / "sec2" / "subspaces" / acceptance.TRAINED)
+unwrap = {m: unwrap_diagnostic(out / "sec2" / "subspaces" / m) for m in [acceptance.TRAINED, *random_models]}
+unwrap[acceptance.TRAINED]
+
+# %% [markdown]
+# Like-for-like R² across models: the authors' metric on duration groups of at least 8 frames
+# (160 ms), where unwrapping is unambiguous. Under the full metric, untrained HuBERT looks close to
+# trained at L2-12 only because trained HuBERT's short groups flip.
+
+# %%
+pd.DataFrame({m: t.set_index("layer_id")["r2_long"] for m, t in unwrap.items()}).round(3)
 
 # %% [markdown]
 # Untrained seed range (side table, no acceptance criteria except the ordering claim above).

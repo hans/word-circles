@@ -19,11 +19,14 @@ LOGMEL = "logmel"
 FIG1A_LAYER = 9
 
 
-def unwrap_diagnostic(subspaces_dir):
+def unwrap_diagnostic(subspaces_dir, min_frames=8):
     """Per-layer in-sample R² with and without the duration groups whose unwrapped angle steps against the rotation.
 
     Short groups (5-7 frames) need near-π steps per frame for a full turn, so np.unwrap can take the short way
     round. The authors' metric keeps them; this side table shows how much of the R² drop they carry.
+    `r2_long` is the authors' metric on groups of at least `min_frames` frames only, where no unwrap rule is
+    ambiguous: the like-for-like comparison across models. `flipped_groups` is only meaningful for trained
+    models; untrained trajectories genuinely backtrack.
     """
     rows = []
     layer_dirs = [p for p in Path(subspaces_dir).iterdir() if p.is_dir() and p.name.isdigit()]
@@ -35,8 +38,9 @@ def unwrap_diagnostic(subspaces_dir):
         r2, slope = _polar_fit(angles)
         flipped = [n for n, theta in angles.items() if (np.sign(np.diff(np.unwrap(theta))) != np.sign(slope)).any()]
         kept = {n: theta for n, theta in angles.items() if n not in flipped}
+        long = {n: theta for n, theta in angles.items() if n >= min_frames}
         rows.append({"layer_id": int(layer_dir.name), "r2_train": r2, "r2_without_flipped": _polar_fit(kept)[0],
-                     "flipped_groups": flipped})
+                     "r2_long": _polar_fit(long)[0], "flipped_groups": flipped})
     return pd.DataFrame(rows)
 
 
