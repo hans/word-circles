@@ -14,10 +14,16 @@ FEAT = config["features"]
 LS_SPLIT = config["librispeech"]["splits"]
 HUBERT_MODELS = ["hubert-base-ls960"] + [f"hubert-base-random-s{s}" for s in FEAT["random_seeds"]]
 EVAL_MODELS = HUBERT_MODELS + ["logmel"]
+W2V2 = config["w2v2"]
+W2V2_OUT = f"{OUT}/w2v2"
 
 
 def cache_manifest(model, split):
     return f"{CACHE}/{model}/Librispeech/{LS_SPLIT[split]}/manifest.toml"
+
+
+def w2v2_cache(corpus):
+    return f"{CACHE}/wav2vec2-base-960h-causal/{corpus}/manifest.toml"
 
 
 def model_layers(model):
@@ -33,6 +39,8 @@ wildcard_constraints:
     method="[a-z0-9_]+?",
     seed=r"\d+",
     est="cpca|leace",
+    layer=r"\d+",
+    corpus="train|dev|timit",
 
 
 rule all:
@@ -51,6 +59,8 @@ rule all:
         f"{OUT}/figures/fig6.png",
         f"{OUT}/reports/replication_report.ipynb",
         [f"{OUT}/tables/dissim_retune.csv"] if config["dissim"]["retune"] else [],
+        expand(f"{OUT}/graded/roseg_{{est}}_frame_graded_scores.parquet", est=["cpca", "leace"]),
+        [f"{W2V2_OUT}/parity.json"] if W2V2["reference_npz_dir"] else [],
 
 
 rule fetch_third_party:
@@ -488,3 +498,151 @@ rule replication_report:
                                          "is_full_run": config["n_utts"] is None}),
     shell:
         "python -m word_circles.notebook {input.notebook} {output} --parameters '{params.parameters}'"
+
+
+# ── Graded RoSeg confidence on TIMIT (abstractography) ────────────────────────
+# Causal wav2vec2-base-960h; CPCA/LEACE fit per layer on the LibriSpeech train
+# sample, W tuned on a dev sample, curves exported for abstractography's sentences.
+
+
+rule w2v2_select_train:
+    input:
+        f"{OUT}/utts/train.txt",
+    output:
+        f"{W2V2_OUT}/utts/train.txt",
+    shell:
+        "python -m word_circles.causal select-first {input} {output} --n-utts {W2V2[n_utts][train]}"
+
+
+rule w2v2_select_dev:
+    input:
+        utts=f"{OUT}/utts/dev.txt",
+        refs=f"{OUT}/refs/dev",
+    output:
+        utts=f"{W2V2_OUT}/utts/dev.txt",
+        refs=directory(f"{W2V2_OUT}/refs/dev"),
+    shell:
+        "python -m word_circles.causal select-sample {input.utts} {input.refs} {output.utts} {output.refs}"
+        " --n-utts {W2V2[n_utts][dev]} --seed {W2V2[seed]}"
+
+
+rule w2v2_select_timit:
+    input:
+        dataset=W2V2["timit_dataset"],
+        stems=W2V2["timit_stems"],
+    output:
+        f"{W2V2_OUT}/utts/timit.txt",
+    shell:
+        "python -m word_circles.causal select-timit {input.dataset} {input.stems} {output}"
+        " --n-utts {W2V2[n_utts][timit]} --expected {W2V2[timit_expected]}"
+
+
+rule w2v2_extract:
+    input:
+        source=lambda w: W2V2["timit_dataset"] if w.corpus == "timit" else f"{DATA}/audio/{w.corpus}",
+        utts=f"{W2V2_OUT}/utts/{{corpus}}.txt",
+    output:
+        w2v2_cache("{corpus}"),
+    params:
+        command=lambda w: "extract-timit" if w.corpus == "timit" else "extract-ls",
+        cache_dir=lambda w, output: os.path.dirname(output[0]),
+        layers=layers_csv(W2V2["layers"]),
+    resources:
+        gpu=1,
+    shell:
+        "python -m word_circles.causal {params.command} --revision {W2V2[hf_revision]} --device {W2V2[device]}"
+        " --batch-size {W2V2[batch_size]} --layers {params.layers} {input.source} {input.utts} {params.cache_dir}"
+
+
+rule w2v2_labels:
+    input:
+        wtt=f"{TP}/wtt",
+        utts=f"{W2V2_OUT}/utts/train.txt",
+        manifest=w2v2_cache("train"),
+    output:
+        ali=f"{W2V2_OUT}/alignments/train-word.ali",
+        stats=f"{W2V2_OUT}/alignments/train-word.clip.json",
+    params:
+        ali=lambda w, input: f"{input.wtt}/{config['alignments']['train']}",
+    shell:
+        "python -m word_circles.labels {params.ali} {input.utts} {input.manifest} {output.ali} {output.stats}"
+
+
+rule w2v2_fit_cpca:
+    input:
+        wtt=f"{TP}/wtt",
+        manifest=w2v2_cache("train"),
+        ali=f"{W2V2_OUT}/alignments/train-word.ali",
+    output:
+        directory(f"{W2V2_OUT}/roseg/subspaces/cpca/{{layer}}"),
+    params:
+        cache=lambda w, input: os.path.dirname(input.manifest),
+        cfg=config["sec2"],
+    shell:
+        "python {input.wtt}/scripts/fit_temporal_subspace.py --input-feature-dir {params.cache}"
+        " --alignment-path {input.ali} --layer-id {wildcards.layer} --estimator Z_CPCA --annotation-unit word"
+        " --min-dur {params.cfg[min_dur]} --max-dur {params.cfg[max_dur]}"
+        " --low-freq-threshold {params.cfg[low_freq_threshold]} --output-dir {output}"
+
+
+rule w2v2_fit_leace:
+    input:
+        manifest=w2v2_cache("train"),
+        ali=f"{W2V2_OUT}/alignments/train-word.ali",
+    output:
+        directory(f"{W2V2_OUT}/roseg/subspaces/leace/{{layer}}"),
+    params:
+        cache=lambda w, input: os.path.dirname(input.manifest),
+        cfg=config["sec2"],
+    shell:
+        "python -m word_circles.roseg fit-leace {params.cache} {input.ali} {output} --layer {wildcards.layer}"
+        " --min-dur {params.cfg[min_dur]} --max-dur {params.cfg[max_dur]}"
+        " --low-freq-threshold {params.cfg[low_freq_threshold]}"
+
+
+rule w2v2_tune_window:
+    input:
+        subspace=f"{W2V2_OUT}/roseg/subspaces/{{est}}/{{layer}}",
+        dev=w2v2_cache("dev"),
+        utts=f"{W2V2_OUT}/utts/dev.txt",
+        refs=f"{W2V2_OUT}/refs/dev",
+        evaluator=f"{TP}/evaluation",
+    output:
+        grid=f"{W2V2_OUT}/roseg/tune/{{est}}/{{layer}}/grid.csv",
+        window=f"{W2V2_OUT}/roseg/tune/{{est}}/{{layer}}/window.json",
+    params:
+        cache=lambda w, input: os.path.dirname(input.dev),
+        grid=lambda w: "" if config["roseg"]["grid"] is None
+        else "--grid '" + json.dumps(config["roseg"]["grid"]) + "'",
+    shell:
+        "python -m word_circles.graded tune-window {input.subspace} {params.cache} {input.utts} {input.refs}"
+        " {input.evaluator} {output.grid} {output.window} {params.grid}"
+
+
+rule roseg_graded:
+    input:
+        subspaces=expand(f"{W2V2_OUT}/roseg/subspaces/{{{{est}}}}/{{layer}}", layer=W2V2["layers"]),
+        windows=expand(f"{W2V2_OUT}/roseg/tune/{{{{est}}}}/{{layer}}/window.json", layer=W2V2["layers"]),
+        timit=w2v2_cache("timit"),
+        utts=f"{W2V2_OUT}/utts/timit.txt",
+    output:
+        f"{OUT}/graded/roseg_{{est}}_frame_graded_scores.parquet",
+    params:
+        cache=lambda w, input: os.path.dirname(input.timit),
+    shell:
+        "python -m word_circles.graded export {params.cache} {input.utts} {output}"
+        " --subspaces {input.subspaces} --windows {input.windows}"
+
+
+rule w2v2_parity:
+    input:
+        timit=w2v2_cache("timit"),
+        utts=f"{W2V2_OUT}/utts/timit.txt",
+    output:
+        f"{W2V2_OUT}/parity.json",
+    params:
+        cache=lambda w, input: os.path.dirname(input.timit),
+        layers=layers_csv(W2V2["layers"]),
+    shell:
+        "python -m word_circles.causal parity {params.cache} {W2V2[reference_npz_dir]} {input.utts} {output}"
+        " --layers {params.layers}"

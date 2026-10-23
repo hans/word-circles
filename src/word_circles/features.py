@@ -142,10 +142,16 @@ def write_manifest(path, provenance, frames):
 
 
 def extract_split(extractor, audio_dir, stems, cache_dir, layers, provenance):
+    """Cache the LibriSpeech utterances `stems` from `audio_dir` (see `write_cache`)."""
+    items = ((stem, load_audio(audio_path(audio_dir, stem))) for stem in stems)
+    write_cache(extractor, items, len(stems), cache_dir, layers, provenance)
+
+
+def write_cache(extractor, items, n_items, cache_dir, layers, provenance):
     """Write `<cache_dir>/<layer>.npz` ({stem: (T, D) float32}, uncompressed) and `manifest.toml`.
 
-    Arrays stream into the archives one utterance at a time, so memory stays
-    at one utterance regardless of split size.
+    `items` yields (stem, wav). Arrays stream into the archives one utterance
+    at a time, so memory stays at one utterance regardless of split size.
     """
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -153,10 +159,9 @@ def extract_split(extractor, audio_dir, stems, cache_dir, layers, provenance):
                 for layer in layers}
     frames = {}
     try:
-        for stem in tqdm(stems, desc=str(cache_dir), mininterval=30):
-            wav = load_audio(audio_path(audio_dir, stem))
+        for stem, wav in tqdm(items, total=n_items, desc=str(cache_dir), mininterval=30):
             outputs = extractor(wav)
-            frames[stem] = frame_count(len(wav))
+            frames[stem] = len(outputs[0])
             for layer in layers:
                 array = np.ascontiguousarray(outputs[layer], dtype=np.float32)
                 with archives[layer].open(f"{stem}.npy", "w", force_zip64=True) as member:

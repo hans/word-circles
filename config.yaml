@@ -65,3 +65,20 @@ dissim:
   window: 4
   prominence: 0.75
   retune: false
+
+# Graded RoSeg confidence on TIMIT for abstractography: causal wav2vec2-base-960h,
+# subspaces fit per layer on the LibriSpeech train sample, W tuned on a dev sample.
+w2v2:
+  hf_revision: 22aad52d435eb6dbaf354bdad9b0da84ce7d6156
+  device: cuda
+  # prefixes per batched Transformer pass
+  batch_size: 32
+  layers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  # train: first n of the 10 h sample (null = all); dev: seeded sample for tuning W; timit: first n stems
+  n_utts: {train: null, dev: 500, timit: null}
+  seed: 0
+  timit_dataset: data/timit-no_repeats
+  timit_stems: resources/timit_stems.txt
+  timit_expected: 499
+  # abstractography's TIMIT .npz features for the parity check; null skips it
+  reference_npz_dir: null

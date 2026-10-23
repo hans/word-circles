@@ -16,3 +16,15 @@ sec2:
 roseg:
   layer: 9
   grid: {prominences: [0.175, 0.349], thetas_over_pi: [0.25, 1.0], windows: [1]}
+w2v2:
+  hf_revision: 22aad52d435eb6dbaf354bdad9b0da84ce7d6156
+  device: cpu
+  batch_size: 32
+  layers: [8, 9]
+  # causal extraction is quadratic in length: keep the CPU smoke tiny
+  n_utts: {train: 12, dev: 6, timit: 5}
+  seed: 0
+  timit_dataset: data/timit-no_repeats
+  timit_stems: resources/timit_stems.txt
+  timit_expected: 499
+  reference_npz_dir: null

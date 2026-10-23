@@ -18,6 +18,8 @@ dependencies = [
     "torchaudio>=2.11.0",
     "tqdm>=4.66",
     "transformers>=5.20.1",
+    "pyarrow>=26.0.0",
+    "datasets>=5.1.0",
 ]
 
 [dependency-groups]
