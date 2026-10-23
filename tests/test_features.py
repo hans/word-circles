@@ -68,3 +68,27 @@ def test_cache_round_trips_through_the_authors_feature_reader(random_hubert, tmp
         arrays = reader.read(list(stems), layer)
         assert [a.shape for a in arrays] == [(frame_count(n), 768) for n in stems.values()]
         assert all(a.dtype == np.float32 for a in arrays)
+
+
+def test_h5_cache_reads_back_the_npz_cache_as_memmaps(tmp_path):
+    from concept_analysis.features.feature_reader import NpzFeatureReader
+    from word_circles.features import H5FeatureReader, feature_reader, write_cache, write_h5_cache
+
+    rng = np.random.default_rng(0)
+    utts = {"a": rng.standard_normal((7, 4, 5)), "b": rng.standard_normal((7, 9, 5)), "c": rng.standard_normal((7, 1, 5))}
+    extractor = lambda key: list(utts[key])
+    for writer, name in ((write_cache, "npz"), (write_h5_cache, "h5")):
+        writer(extractor, ((k, k) for k in utts), len(utts), tmp_path / name, [0, 3, 6], {"model_name": "fake"})
+
+    npz, h5 = feature_reader(tmp_path / "npz"), feature_reader(tmp_path / "h5")
+    assert type(npz) is NpzFeatureReader and type(h5) is H5FeatureReader
+    assert h5.feature_frame_rate_for_layer(3) == 50.0
+    for layer in (0, 3, 6):
+        assert h5.list_ids(layer) == sorted(utts)
+        ids = ["c", "a", "b", "a"]
+        arrays = h5.read_layer(ids, layer)
+        assert all(isinstance(a, np.memmap) and not a.flags.writeable for a in arrays)
+        for got, want in zip(arrays, npz.read_layer(ids, layer)):
+            np.testing.assert_array_equal(got, want)
+    with pytest.raises(KeyError, match="missing"):
+        h5.read_layer(["missing"], 0)

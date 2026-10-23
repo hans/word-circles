@@ -22,8 +22,8 @@ def cache_manifest(model, split):
     return f"{CACHE}/{model}/Librispeech/{LS_SPLIT[split]}/manifest.toml"
 
 
-def w2v2_cache(corpus):
-    return f"{CACHE}/wav2vec2-base-960h-causal/{corpus}/manifest.toml"
+def w2v2_cache(corpus, name="manifest.toml"):
+    return f"{config['w2v2']['cache_dir'] or CACHE}/wav2vec2-base-960h-causal/{corpus}/{name}"
 
 
 def model_layers(model):
@@ -542,16 +542,20 @@ rule w2v2_extract:
         source=lambda w: W2V2["timit_dataset"] if w.corpus == "timit" else f"{DATA}/audio/{w.corpus}",
         utts=f"{W2V2_OUT}/utts/{{corpus}}.txt",
     output:
-        w2v2_cache("{corpus}"),
+        manifest=w2v2_cache("{corpus}"),
+        h5=w2v2_cache("{corpus}", "features.h5"),
+    log:
+        f"{W2V2_OUT}/logs/extract_{{corpus}}.log",
     params:
         command=lambda w: "extract-timit" if w.corpus == "timit" else "extract-ls",
-        cache_dir=lambda w, output: os.path.dirname(output[0]),
+        cache_dir=lambda w, output: os.path.dirname(output.manifest),
         layers=layers_csv(W2V2["layers"]),
     resources:
         gpu=1,
     shell:
         "python -m word_circles.causal {params.command} --revision {W2V2[hf_revision]} --device {W2V2[device]}"
         " --batch-size {W2V2[batch_size]} --layers {params.layers} {input.source} {input.utts} {params.cache_dir}"
+        " 2> {log}"
 
 
 rule w2v2_labels:
@@ -579,10 +583,9 @@ rule w2v2_fit_cpca:
         cache=lambda w, input: os.path.dirname(input.manifest),
         cfg=config["sec2"],
     shell:
-        "python {input.wtt}/scripts/fit_temporal_subspace.py --input-feature-dir {params.cache}"
-        " --alignment-path {input.ali} --layer-id {wildcards.layer} --estimator Z_CPCA --annotation-unit word"
-        " --min-dur {params.cfg[min_dur]} --max-dur {params.cfg[max_dur]}"
-        " --low-freq-threshold {params.cfg[low_freq_threshold]} --output-dir {output}"
+        "python -m word_circles.roseg fit-cpca {input.wtt} {params.cache} {input.ali} {output}"
+        " --layer {wildcards.layer} --min-dur {params.cfg[min_dur]} --max-dur {params.cfg[max_dur]}"
+        " --low-freq-threshold {params.cfg[low_freq_threshold]}"
 
 
 rule w2v2_fit_leace:

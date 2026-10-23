@@ -74,6 +74,8 @@ w2v2:
   # prefixes per batched Transformer pass
   batch_size: 32
   layers: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+  # root of the memory-mapped features.h5 caches (~72 GB for the 10 h train sample); null = cache_dir
+  cache_dir: /scratch/jgauthier/word-circles
   # train: first n of the 10 h sample (null = all); dev: seeded sample for tuning W; timit: first n stems
   n_utts: {train: null, dev: 500, timit: null}
   seed: 0

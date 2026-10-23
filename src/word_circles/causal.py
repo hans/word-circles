@@ -16,7 +16,8 @@ import torch
 from transformers import Wav2Vec2FeatureExtractor, Wav2Vec2Model
 
 from word_circles.data import link_references, take
-from word_circles.features import SAMPLE_RATE, configure_precision, extract_split, provenance, write_cache
+from word_circles.features import (SAMPLE_RATE, configure_precision, extract_split, feature_reader, provenance,
+                                   write_h5_cache)
 
 MODEL_ID = "facebook/wav2vec2-base-960h"
 MODEL_NAME = "wav2vec2-base-960h-causal"
@@ -160,13 +161,11 @@ def load_reference(path):
 
 def parity(cache_dir, reference_dir, stems, layers):
     """Per-layer agreement of our cache with abstractography's features on the stems both have."""
-    from concept_analysis.features import NpzFeatureReader
-
     references = {p.stem: p for p in Path(reference_dir).glob("*.npz")}
     shared = [s for s in stems if s in references]
     if not shared:
         raise ValueError(f"no reference .npz in {reference_dir} matches the cached stems")
-    reader = NpzFeatureReader(cache_dir)
+    reader = feature_reader(cache_dir)
     ours = {layer: dict(zip(shared, reader.read_layer(shared, layer))) for layer in layers}
     rows, frame_mismatches = [], []
     for stem in shared:
@@ -250,9 +249,9 @@ def main():
               "causal_prefixes": True, "batch_size": args.batch_size}
     stems = args.utts.read_text().split()
     if args.command == "extract-ls":
-        extract_split(extractor, args.source, stems, args.cache_dir, args.layers, fields)
+        extract_split(extractor, args.source, stems, args.cache_dir, args.layers, fields, writer=write_h5_cache)
     else:
-        write_cache(extractor, timit_items(args.source, stems), len(stems), args.cache_dir, args.layers, fields)
+        write_h5_cache(extractor, timit_items(args.source, stems), len(stems), args.cache_dir, args.layers, fields)
 
 
 if __name__ == "__main__":

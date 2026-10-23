@@ -8,6 +8,7 @@ dev-clean R-value.
 
 import argparse
 import csv
+import importlib.util
 import json
 import math
 import tempfile
@@ -15,11 +16,11 @@ from pathlib import Path
 
 import numpy as np
 from concept_analysis.annotations import get_word_alignment, load_data
-from concept_analysis.features import NpzFeatureReader
 from concept_analysis.projector import LEACEProjection, PCAProjection
 from concept_analysis.trajectory import detect_boundaries, get_mean_trajectories, group_and_preprocess_feature
 
 from word_circles.evaluation import score_boundaries, write_predictions
+from word_circles.features import feature_reader
 from concept_analysis.subspaces.leace_np import LeaceFitterCCA
 
 LEACE_CHUNK_FRAMES = 50_000
@@ -133,7 +134,7 @@ def fit_leace_subspace(cache_dir, ali_path, layer, out_dir, *, min_dur, max_dur,
     Writes the authors' artifacts (temporal_subspace.pkl, mean_trajectories.npz,
     metadata.json) so their tools read the result unchanged.
     """
-    store = NpzFeatureReader(cache_dir)
+    store = feature_reader(cache_dir)
     alignment = get_word_alignment(ali_path, drop_silence=True, feature_frame_rate=FRAME_RATE)
     ids = alignment["utt_id"].drop_duplicates().tolist()
     X, y = load_data(id2features=dict(zip(ids, store.read_layer(ids, layer))), alignment=alignment,
@@ -155,6 +156,17 @@ def fit_leace_subspace(cache_dir, ali_path, layer, out_dir, *, min_dur, max_dur,
     (out_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
 
 
+def fit_cpca_subspace(wtt_dir, cache_dir, ali_path, layer, out_dir, *, min_dur, max_dur, low_freq_threshold):
+    """`fit_temporal_subspace.py --estimator Z_CPCA --annotation-unit word`, reading `cache_dir` via `feature_reader`."""
+    spec = importlib.util.spec_from_file_location("fit_temporal_subspace",
+                                                  Path(wtt_dir) / "scripts" / "fit_temporal_subspace.py")
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    script.fit_temporal_subspaces(feature_reader(cache_dir), Path(ali_path), Path(out_dir), layer_id=layer,
+                                  annotation_unit="word", estimator="Z_CPCA", min_dur=min_dur, max_dur=max_dur,
+                                  low_freq_threshold=low_freq_threshold)
+
+
 def load_subspace(subspace_dir):
     metadata = json.loads((Path(subspace_dir) / "metadata.json").read_text())
     cls = {name: c for name, c in ESTIMATORS.values()}[metadata["estimator"]]
@@ -163,7 +175,7 @@ def load_subspace(subspace_dir):
 
 def project_utterances(subspace, cache_dir, stems, layer):
     """Each utterance's whole L9 sequence (silence included) in the 2-D subspace."""
-    features = NpzFeatureReader(cache_dir).read_layer(list(stems), layer)
+    features = feature_reader(cache_dir).read_layer(list(stems), layer)
     return {stem: subspace.transform(x, n_components=2) for stem, x in zip(stems, features)}
 
 
@@ -280,6 +292,13 @@ def main():
     fit.add_argument("--min-dur", type=float, required=True)
     fit.add_argument("--max-dur", type=float, required=True)
     fit.add_argument("--low-freq-threshold", type=int, required=True)
+    cpca = sub.add_parser("fit-cpca", help="the authors' Z_CPCA fit on a cache of either format")
+    cpca.add_argument("wtt_dir", type=Path)
+    for name in ("cache_dir", "ali", "out_dir"):
+        cpca.add_argument(name, type=Path)
+    cpca.add_argument("--layer", type=int, required=True)
+    for name, kind in (("--min-dur", float), ("--max-dur", float), ("--low-freq-threshold", int)):
+        cpca.add_argument(name, type=kind, required=True)
     tun = sub.add_parser("tune")
     for name in ("subspace_dir", "cache_dir", "utts", "ref_dir", "evaluator_dir", "grid_csv", "selection_json"):
         tun.add_argument(name, type=Path)
@@ -304,6 +323,9 @@ def main():
     if args.command == "fit-leace":
         fit_leace_subspace(args.cache_dir, args.ali, args.layer, args.out_dir, min_dur=args.min_dur,
                            max_dur=args.max_dur, low_freq_threshold=args.low_freq_threshold)
+    elif args.command == "fit-cpca":
+        fit_cpca_subspace(args.wtt_dir, args.cache_dir, args.ali, args.layer, args.out_dir, min_dur=args.min_dur,
+                          max_dur=args.max_dur, low_freq_threshold=args.low_freq_threshold)
     elif args.command == "tune":
         configs = None
         if args.grid:

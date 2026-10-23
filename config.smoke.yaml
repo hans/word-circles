@@ -21,6 +21,7 @@ w2v2:
   device: cpu
   batch_size: 32
   layers: [8, 9]
+  cache_dir: null
   # causal extraction is quadratic in length: keep the CPU smoke tiny
   n_utts: {train: 12, dev: 6, timit: 5}
   seed: 0

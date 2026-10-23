@@ -20,6 +20,7 @@ dependencies = [
     "transformers>=5.20.1",
     "pyarrow>=26.0.0",
     "datasets>=5.1.0",
+    "h5py>=3.16.0",
 ]
 
 [dependency-groups]

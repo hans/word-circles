@@ -10,10 +10,12 @@ import hashlib
 import zipfile
 from pathlib import Path
 
+import h5py
 import numpy as np
 import soundfile as sf
 import torch
 import torchaudio
+from concept_analysis.features import NpzFeatureReader
 from safetensors.torch import load_file, save_file
 from tqdm import tqdm
 from transformers import HubertConfig, HubertModel, Wav2Vec2FeatureExtractor
@@ -141,10 +143,10 @@ def write_manifest(path, provenance, frames):
     Path(path).write_text("\n".join(lines) + "\n")
 
 
-def extract_split(extractor, audio_dir, stems, cache_dir, layers, provenance):
-    """Cache the LibriSpeech utterances `stems` from `audio_dir` (see `write_cache`)."""
+def extract_split(extractor, audio_dir, stems, cache_dir, layers, provenance, writer=None):
+    """Cache the LibriSpeech utterances `stems` from `audio_dir` with `writer` (default `write_cache`)."""
     items = ((stem, load_audio(audio_path(audio_dir, stem))) for stem in stems)
-    write_cache(extractor, items, len(stems), cache_dir, layers, provenance)
+    (writer or write_cache)(extractor, items, len(stems), cache_dir, layers, provenance)
 
 
 def write_cache(extractor, items, n_items, cache_dir, layers, provenance):
@@ -170,6 +172,63 @@ def write_cache(extractor, items, n_items, cache_dir, layers, provenance):
         for archive in archives.values():
             archive.close()
     write_manifest(cache_dir / "manifest.toml", provenance, frames)
+
+
+H5_NAME = "features.h5"
+
+
+def write_h5_cache(extractor, items, n_items, cache_dir, layers, provenance):
+    """Write `<cache_dir>/features.h5` ({layer}/{stem}: (T, D) float32) and `manifest.toml`.
+
+    Datasets are contiguous and uncompressed so `H5FeatureReader` can memory-map
+    them. Memory stays at one utterance regardless of split size.
+    """
+    cache_dir = Path(cache_dir)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    frames = {}
+    with h5py.File(cache_dir / H5_NAME, "w", libver="latest") as h5:
+        groups = {layer: h5.create_group(str(layer)) for layer in layers}
+        bar = tqdm(items, total=n_items, desc=str(cache_dir), unit="utt", mininterval=10)
+        for stem, wav in bar:
+            outputs = extractor(wav)
+            frames[stem] = len(outputs[0])
+            for layer in layers:
+                groups[layer].create_dataset(stem, data=np.ascontiguousarray(outputs[layer], dtype=np.float32))
+            bar.set_postfix(frames=sum(frames.values()), refresh=False)
+    write_manifest(cache_dir / "manifest.toml", provenance, frames)
+
+
+def feature_reader(cache_dir):
+    """`H5FeatureReader` for a cache with `features.h5`, else the authors' `NpzFeatureReader`."""
+    if (Path(cache_dir) / H5_NAME).exists():
+        return H5FeatureReader(cache_dir)
+    return NpzFeatureReader(cache_dir)
+
+
+class H5FeatureReader(NpzFeatureReader):
+    """`NpzFeatureReader`'s interface over `features.h5`, returning read-only memmaps.
+
+    Pages load on access and are shared through the page cache, so concurrent
+    readers of one cache do not each hold a copy.
+    """
+
+    def read(self, ids, layer):
+        if layer is None:
+            raise ValueError("A layer is required when reading a cache_dir")
+        ids = [ids] if isinstance(ids, str) else list(ids)
+        path = self.cache_dir / H5_NAME
+        with h5py.File(path, "r") as h5:
+            group = h5[str(layer)]
+            missing = [i for i in ids if i not in group]
+            if missing:
+                raise KeyError(f"Missing utterance IDs in {path}[{layer}]: {missing!r}")
+            spans = {i: (group[i].id.get_offset(), group[i].shape) for i in set(ids)}
+        return [np.memmap(path, dtype=np.float32, mode="r", offset=offset, shape=shape)
+                for offset, shape in (spans[i] for i in ids)]
+
+    def list_ids(self, layer):
+        with h5py.File(self.cache_dir / H5_NAME, "r") as h5:
+            return list(h5[str(layer)])
 
 
 def provenance(model, device, revision, do_normalize, weights=None):
