@@ -223,7 +223,9 @@ class H5FeatureReader(NpzFeatureReader):
             if missing:
                 raise KeyError(f"Missing utterance IDs in {path}[{layer}]: {missing!r}")
             spans = {i: (group[i].id.get_offset(), group[i].shape) for i in set(ids)}
-        return [np.memmap(path, dtype=np.float32, mode="r", offset=offset, shape=shape)
+        # One mapping per call: a memmap per utterance holds a descriptor each and exhausts the fd limit.
+        mapped = np.memmap(path, dtype=np.uint8, mode="r")
+        return [mapped[offset:offset + 4 * int(np.prod(shape))].view(np.float32).reshape(shape)
                 for offset, shape in (spans[i] for i in ids)]
 
     def list_ids(self, layer):

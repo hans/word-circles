@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 
@@ -90,5 +92,9 @@ def test_h5_cache_reads_back_the_npz_cache_as_memmaps(tmp_path):
         assert all(isinstance(a, np.memmap) and not a.flags.writeable for a in arrays)
         for got, want in zip(arrays, npz.read_layer(ids, layer)):
             np.testing.assert_array_equal(got, want)
+    fds = len(os.listdir("/proc/self/fd"))
+    many = h5.read_layer(["a", "b", "c"] * 2000, 0)
+    assert len(os.listdir("/proc/self/fd")) - fds <= 1
+    del many
     with pytest.raises(KeyError, match="missing"):
         h5.read_layer(["missing"], 0)
