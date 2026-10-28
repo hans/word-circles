@@ -159,29 +159,60 @@ def load_reference(path):
     return archive["arr_0"].item()["features"] if "arr_0" in archive else archive["features"]
 
 
-def parity(cache_dir, reference_dir, stems, layers):
-    """Per-layer agreement of our cache with abstractography's features on the stems both have."""
-    references = {p.stem: p for p in Path(reference_dir).glob("*.npz")}
-    shared = [s for s in stems if s in references]
-    if not shared:
-        raise ValueError(f"no reference .npz in {reference_dir} matches the cached stems")
-    reader = feature_reader(cache_dir)
-    ours = {layer: dict(zip(shared, reader.read_layer(shared, layer))) for layer in layers}
+def compare(ours, references, layers):
+    """Per-layer agreement of `ours` ({layer: {stem: (T, H)}}) with `references` ({stem: (L, T, H)})."""
     rows, frame_mismatches = [], []
-    for stem in shared:
-        ref = load_reference(references[stem])
+    for stem, ref in references.items():
         if ref.shape[1] != len(ours[layers[0]][stem]):
             frame_mismatches.append({"stem": stem, "ours": len(ours[layers[0]][stem]), "reference": ref.shape[1]})
             continue
         for layer in layers:
             a, b = ours[layer][stem], ref[layer]
             cos = (a * b).sum(-1) / (np.linalg.norm(a, axis=-1) * np.linalg.norm(b, axis=-1))
-            rows.append({"stem": stem, "layer": layer, "max_abs_diff": float(np.abs(a - b).max()),
-                         "max_rel_diff": float(np.abs(a - b).max() / np.abs(b).max()), "min_cos": float(cos.min())})
+            rows.append({"stem": stem, "layer": layer, "n_frames": len(a), "max_abs_diff": float(np.abs(a - b).max()),
+                         "max_rel_diff": float(np.abs(a - b).max() / np.abs(b).max()), "min_cos": float(cos.min()),
+                         "min_cos_frame": int(cos.argmin())})
     by_layer = {layer: {"max_rel_diff": max(r["max_rel_diff"] for r in rows if r["layer"] == layer),
                         "min_cos": min(r["min_cos"] for r in rows if r["layer"] == layer)}
                 for layer in layers if any(r["layer"] == layer for r in rows)}
-    return {"n_stems": len(shared), "frame_mismatches": frame_mismatches, "by_layer": by_layer, "rows": rows}
+    return {"n_stems": len(references), "frame_mismatches": frame_mismatches, "by_layer": by_layer, "rows": rows}
+
+
+def read_cache(cache_dir, stems, layers):
+    reader = feature_reader(cache_dir)
+    return {layer: dict(zip(stems, reader.read_layer(stems, layer))) for layer in layers}
+
+
+def parity(cache_dir, reference_dir, stems, layers):
+    """Per-layer agreement of our cache with abstractography's features on the stems both have."""
+    references = {p.stem: p for p in Path(reference_dir).glob("*.npz")}
+    shared = [s for s in stems if s in references]
+    if not shared:
+        raise ValueError(f"no reference .npz in {reference_dir} matches the cached stems")
+    return compare(read_cache(cache_dir, shared, layers), {s: load_reference(references[s]) for s in shared}, layers)
+
+
+def reference_features(audio, processor, model):
+    """abstractography's `extract_features_of_audio`: one unbatched pass per prefix. (L, T, H)."""
+    frames = []
+    for f in range(frame_count(len(audio))):
+        inputs = processor(audio[:f * HOP + WIN], sampling_rate=SAMPLE_RATE, return_tensors="pt", padding=False)
+        with torch.no_grad():
+            outputs = model(**inputs, output_hidden_states=True)
+        frames.append(np.stack([hs[0, -1, :].cpu().numpy() for hs in outputs.hidden_states]))
+    return np.stack(frames).transpose(1, 0, 2)
+
+
+def parity_unbatched(cache_dir, dataset_dir, stems, layers, revision):
+    """Our cache against abstractography's extraction loop on CPU, run on the same rebuilt TIMIT audio.
+
+    Agreement to float precision clears our batched extractor, leaving the
+    input audio to explain any gap to abstractography's .npz.
+    """
+    processor = Wav2Vec2FeatureExtractor.from_pretrained(MODEL_ID, revision=revision)
+    model = Wav2Vec2Model.from_pretrained(MODEL_ID, revision=revision).eval()
+    references = {stem: reference_features(wav, processor, model) for stem, wav in timit_items(dataset_dir, stems)}
+    return compare(read_cache(cache_dir, stems, layers), references, layers)
 
 
 def main():
@@ -220,6 +251,13 @@ def main():
     par.add_argument("utts", type=Path)
     par.add_argument("out", type=Path)
     par.add_argument("--layers", type=lambda s: [int(x) for x in s.split(",")], required=True)
+    unb = sub.add_parser("parity-unbatched", help="compare a TIMIT cache with abstractography's loop on the same audio")
+    unb.add_argument("cache_dir", type=Path)
+    unb.add_argument("dataset_dir", type=Path)
+    unb.add_argument("out", type=Path)
+    unb.add_argument("--stems", type=lambda s: s.split(","), required=True)
+    unb.add_argument("--revision", required=True)
+    unb.add_argument("--layers", type=lambda s: [int(x) for x in s.split(",")], required=True)
     args = parser.parse_args()
 
     if args.command.startswith("select"):
@@ -233,8 +271,11 @@ def main():
         args.out_utts.parent.mkdir(parents=True, exist_ok=True)
         args.out_utts.write_text("".join(f"{s}\n" for s in stems))
         return
-    if args.command == "parity":
-        report = parity(args.cache_dir, args.reference_dir, args.utts.read_text().split(), args.layers)
+    if args.command.startswith("parity"):
+        if args.command == "parity":
+            report = parity(args.cache_dir, args.reference_dir, args.utts.read_text().split(), args.layers)
+        else:
+            report = parity_unbatched(args.cache_dir, args.dataset_dir, args.stems, args.layers, args.revision)
         args.out.write_text(json.dumps(report, indent=1) + "\n")
         print(json.dumps({k: report[k] for k in ("n_stems", "by_layer")}, indent=1))
         return
