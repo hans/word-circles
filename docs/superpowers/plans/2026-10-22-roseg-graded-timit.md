@@ -37,8 +37,12 @@ file unchanged.
      input under group norm.
 2. **TIMIT audio.** The audio comes from `timit-no_repeats` `input_values`.
    - Those values were normalized over the whole utterance but still sit on the
-     int16 grid, so we rescale them to the int16/32768 scale abstractography read
-     from WAV. Per-prefix normalization makes that equal up to the 1e-7 epsilon.
+     int16 grid, so we rescale them to int16/32768 and then peak-normalize to 0.99
+     of full scale, rounded to 16 bits. abstractography's TIMIT WAVs were written
+     that way, and the gain matters because the 1e-7 epsilon in per-prefix
+     normalization is comparable to the variance of a quiet onset. Checked on
+     `mwew0_si1361`: the result equals their WAV sample for sample, and their
+     `.npz` features then match to cosine 1.0.
    - The 499 stems are fixed in `resources/timit_stems.txt`, taken from
      abstractography's RSA parquet.
 3. **Subspace.** CPCA and LEACE are fit per layer (0..12) on causal features of the

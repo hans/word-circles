@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 import torch
 
-from word_circles.causal import (CausalWav2Vec2Features, compare, frame_count, int16_scale, reference_features,
-                                 sample_stems, timit_stem)
+from word_circles.causal import (CausalWav2Vec2Features, compare, frame_count, int16_scale, peak_normalise,
+                                 reference_features, sample_stems, timit_stem)
 
 
 @pytest.fixture(scope="module")
@@ -51,6 +51,15 @@ def test_int16_scale_normalises_every_prefix_like_the_raw_samples():
     for n in (400, 2000, 8000):
         np.testing.assert_allclose(processor(rescaled[:n], sampling_rate=16000).input_values[0],
                                    processor(raw[:n], sampling_rate=16000).input_values[0], atol=1e-4)
+
+
+def test_peak_normalise_puts_the_peak_at_99_percent_of_full_scale_on_the_16_bit_grid():
+    raw = np.random.default_rng(0).integers(-3000, 3000, 8000)
+    out = peak_normalise((raw + 0.0095).astype(np.float32) / 32768)
+    levels = out.astype(np.float64) * 32768
+    assert np.abs(levels).max() == int(0.99 * 32768) and np.allclose(levels, np.round(levels))
+    gain = 0.99 * 32768 / np.abs(raw).max()
+    np.testing.assert_array_equal(levels, np.round(raw * gain))
 
 
 def test_int16_scale_rejects_audio_off_a_16_bit_grid():

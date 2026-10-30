@@ -23,6 +23,7 @@ MODEL_ID = "facebook/wav2vec2-base-960h"
 MODEL_NAME = "wav2vec2-base-960h-causal"
 HOP = 320
 WIN = 400
+TIMIT_PEAK = 0.99
 
 
 def frame_count(n_samples):
@@ -120,18 +121,29 @@ def int16_scale(input_values):
     return (input_values / (step * 32768)).astype(np.float32)
 
 
+def peak_normalise(audio):
+    """Scale 16-bit audio so its peak is `TIMIT_PEAK` of full scale and round back to 16 bits.
+
+    abstractography's TIMIT WAVs were written this way, and the gain matters
+    because the per-prefix normalisation's 1e-7 epsilon is comparable to the
+    variance of a quiet utterance onset.
+    """
+    samples = np.rint(audio.astype(np.float64) * 32768)
+    return (np.rint(samples * (TIMIT_PEAK * 32768 / np.abs(samples).max())) / 32768).astype(np.float32)
+
+
 def timit_index(dataset):
     return {timit_stem(f, i): k for k, (f, i) in enumerate(zip(dataset["file"], dataset["id"]))}
 
 
 def timit_items(dataset_dir, stems):
-    """(stem, wav) for `stems` from the HF `timit-no_repeats` dataset."""
+    """(stem, wav) for `stems` from the HF `timit-no_repeats` dataset, as abstractography's peak-normalised WAVs."""
     import datasets
 
     dataset = datasets.load_from_disk(str(dataset_dir))
     index = timit_index(dataset.select_columns(["file", "id"]))
     for stem in stems:
-        yield stem, int16_scale(np.asarray(dataset[index[stem]]["input_values"], dtype=np.float32))
+        yield stem, peak_normalise(int16_scale(np.asarray(dataset[index[stem]]["input_values"], dtype=np.float32)))
 
 
 def select_timit(dataset_dir, stems_file, n_utts=None, expected=None):
@@ -289,6 +301,8 @@ def main():
     fields = {**provenance(MODEL_NAME, args.device, args.revision, True), "hf_model_id": MODEL_ID,
               "causal_prefixes": True, "batch_size": args.batch_size}
     stems = args.utts.read_text().split()
+    if args.command == "extract-timit":
+        fields["peak_normalised"] = TIMIT_PEAK
     if args.command == "extract-ls":
         extract_split(extractor, args.source, stems, args.cache_dir, args.layers, fields, writer=write_h5_cache)
     else:
